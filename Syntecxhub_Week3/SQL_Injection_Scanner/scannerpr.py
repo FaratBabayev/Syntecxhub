@@ -1,0 +1,204 @@
+import requests
+import logging
+import time
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+import os
+from concurrent.futures import ThreadPoolExecutor
+REQUEST_DELAY = 0.5
+SQL_ERRORS = [
+    "sql syntax",
+    "mysql",
+    "warning:",
+    "sqlite",
+    "postgresql",
+    "odbc",
+    "oracle"
+]
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    filename="logs/scan_results.txt",
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s"
+)
+findings = []
+session = requests.Session()
+session.headers.update({
+    "User-Agent": "SQLInjectionScanner/1.0"
+})
+def get_page(url):
+    """
+    Download a webpage.
+    """
+    try:
+        response = session.get(url, timeout=10)
+        return response
+    except requests.RequestException as e:
+        print(f"[ERROR] {e}")
+        return None
+def get_forms(url):
+    """
+    Download the page and extract all HTML forms.
+    """
+    response = get_page(url)
+    if response is None:
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    forms = soup.find_all("form")
+    return forms
+def get_form_details(form, url):
+    """
+    Extract useful information from an HTML form.
+    """
+    details = {}
+    action = form.attrs.get("action", "")
+    details["action"] = urljoin(url, action)
+    method = form.attrs.get("method", "get").lower()
+    details["method"] = method
+    inputs = []
+    for input_tag in form.find_all("input"):
+        input_type = input_tag.attrs.get("type", "text")
+        input_name = input_tag.attrs.get("name")
+        input_value = input_tag.attrs.get("value", "")
+        inputs.append({
+            "type": input_type,
+            "name": input_name,
+            "value": input_value
+        })
+    details["inputs"] = inputs
+    return details
+def load_payloads(filename="payloads.txt"):
+    """
+    Load test payloads from a file.
+    """
+    try:
+        with open(filename, "r", encoding="utf-8") as file:
+            payloads = [
+                line.strip()
+                for line in file
+                if line.strip() and not line.strip().startswith("#")
+            ]
+        return payloads
+    except FileNotFoundError:
+        print(f"[ERROR] {filename} not found.")
+        return []
+def analyze_response(response):
+    """
+    Extract useful information from a response.
+    """
+    if response is None:
+        return None
+    return {
+        "status_code": response.status_code,
+        "content_length": len(response.text),
+        "response_time": response.elapsed.total_seconds()
+    }
+def build_form_data(inputs, payload):
+    """
+    Build the form data dictionary.
+    """
+    data = {}
+    for field in inputs:
+        if not field["name"]:
+            continue
+        if field["type"] == "hidden":
+            data[field["name"]] = field["value"]
+        elif field["type"] == "submit":
+            data[field["name"]] = field["value"]
+        else:
+            data[field["name"]] = payload
+    return data
+def submit_form(details, payload):
+    """
+    Submit a form with the provided payload.
+    """
+    data = build_form_data(details["inputs"], payload)
+    time.sleep(REQUEST_DELAY)
+    try:
+        if details["method"] == "post":
+            response = session.post(
+                details["action"],
+                data=data,
+                timeout=10
+            )
+        else:
+            response = session.get(
+                details["action"],
+                params=data,
+                timeout=10
+            )
+        return response
+    except requests.RequestException as e:
+        print(f"[ERROR] {e}")
+        return None
+def has_sql_error(response):
+    if response is None:
+        return False
+    text = response.text.lower()
+    for error in SQL_ERRORS:
+        if error in text:
+            return True
+    return False
+def scan_form(form, target, payloads):
+    details = get_form_details(form, target)
+    print(f"\nScanning: {details['action']}")
+    for payload in payloads:
+        response = submit_form(details, payload)
+        if has_sql_error(response):
+            print(f"[!] Potential SQL error detected with payload: {payload}")
+            findings.append({
+                "url": details["action"],
+                "payload": payload
+            })
+            logging.warning(
+                f"Potential finding | URL={details['action']} | Payload={payload}"
+            )
+        info = analyze_response(response)
+        if info:
+            print(
+                f"{payload} -> "
+                f"Status: {info['status_code']} | "
+                f"Length: {info['content_length']} bytes | "
+                f"Time: {info['response_time']:.3f}s"
+            )
+            logging.info(
+                f"URL={details['action']} | "
+                f"Payload={payload} | "
+                f"Status={info['status_code']} | "
+                f"Length={info['content_length']} | "
+                f"Time={info['response_time']:.3f}s"
+)
+if __name__ == "__main__":
+    start = time.time()
+    target = input("Target URL: ").strip()
+    forms = get_forms(target)
+    if not forms:
+        print("No forms found on the page.")
+        exit()
+    print(f"\nFound {len(forms)} form(s).\n")
+    payloads = load_payloads()
+    if not payloads:
+        print("No payloads found.")
+        exit()
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = []
+        for form in forms:
+            futures.append(
+                executor.submit(scan_form, form, target, payloads)
+            )
+        for future in futures:
+            future.result()
+    end = time.time()
+    print(f"Scan Duration    : {end - start:.2f} seconds")
+    print("\n========== Scan Summary ==========")
+    print(f"Target           : {target}")
+    print(f"Forms Found      : {len(forms)}")
+    print(f"Payloads Tested  : {len(payloads)}")
+    print(f"Requests Sent    : {len(forms) * len(payloads)}")
+    print(f"Potential Findings: {len(findings)}")
+    if findings:
+        print("\nPotential Findings:")
+        for finding in findings:
+            print(f" - URL: {finding['url']}")
+            print(f"   Payload: {finding['payload']}")
+    print("==================================")

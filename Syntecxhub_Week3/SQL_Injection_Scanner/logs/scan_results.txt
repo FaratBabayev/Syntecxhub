@@ -1,0 +1,14 @@
+2026-07-17 23:35:39,249 - URL=http://127.0.0.1:5000 | Payload=test | Status=200 | Length=23 | Time=0.004s
+2026-07-17 23:35:39,755 - URL=http://127.0.0.1:5000 | Payload=admin | Status=200 | Length=24 | Time=0.003s
+2026-07-17 23:35:40,262 - Potential finding | URL=http://127.0.0.1:5000 | Payload='
+2026-07-17 23:35:40,262 - URL=http://127.0.0.1:5000 | Payload=' | Status=500 | Length=191 | Time=0.004s
+2026-07-17 23:35:40,769 - Potential finding | URL=http://127.0.0.1:5000 | Payload=''
+2026-07-17 23:35:40,770 - URL=http://127.0.0.1:5000 | Payload='' | Status=500 | Length=191 | Time=0.004s
+2026-07-17 23:35:41,278 - Potential finding | URL=http://127.0.0.1:5000 | Payload=' OR '1'='1
+2026-07-17 23:35:41,279 - URL=http://127.0.0.1:5000 | Payload=' OR '1'='1 | Status=500 | Length=191 | Time=0.004s
+2026-07-17 23:35:41,798 - Potential finding | URL=http://127.0.0.1:5000 | Payload=" OR "1"="1
+2026-07-17 23:35:41,799 - URL=http://127.0.0.1:5000 | Payload=" OR "1"="1 | Status=500 | Length=191 | Time=0.005s
+2026-07-17 23:35:42,336 - Potential finding | URL=http://127.0.0.1:5000 | Payload=admin'--
+2026-07-17 23:35:42,337 - URL=http://127.0.0.1:5000 | Payload=admin'-- | Status=500 | Length=191 | Time=0.035s
+2026-07-17 23:35:42,879 - Potential finding | URL=http://127.0.0.1:5000 | Payload=UNION SELECT NULL--
+2026-07-17 23:35:42,881 - URL=http://127.0.0.1:5000 | Payload=UNION SELECT NULL-- | Status=500 | Length=191 | Time=0.034s
